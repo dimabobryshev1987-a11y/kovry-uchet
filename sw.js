@@ -1,5 +1,5 @@
 // Позволяет приложению открываться без интернета
-const CACHE = 'kovry-v2';
+const CACHE = 'kovry-v3';
 const FILES = ['./', 'index.html', 'manifest.json', 'icon-180.png', 'icon-192.png', 'icon-512.png'];
 
 self.addEventListener('install', e => {
