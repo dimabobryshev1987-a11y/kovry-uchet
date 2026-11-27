@@ -1,0 +1,411 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Ковры">
+<meta name="theme-color" content="#2f6f4f">
+<title>Учёт ковров</title>
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icon-180.png">
+<link rel="icon" href="icon-192.png">
+<style>
+  :root {
+    --green: #2f6f4f;
+    --bg: #f3f4f1;
+    --card: #ffffff;
+    --text: #1d1f1c;
+    --muted: #6b706a;
+    --red: #c0392b;
+    --orange: #d68910;
+    --line: #dfe2dc;
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    font-size: 17px;
+    padding-bottom: calc(90px + env(safe-area-inset-bottom));
+  }
+  header {
+    position: sticky; top: 0; z-index: 5;
+    background: var(--green); color: #fff;
+    padding: calc(12px + env(safe-area-inset-top)) 16px 12px;
+  }
+  header h1 { margin: 0 0 10px; font-size: 22px; font-weight: 600; }
+  .search {
+    width: 100%; padding: 10px 12px; border: 0; border-radius: 10px;
+    font-size: 17px;
+  }
+  .tabs { display: flex; gap: 6px; padding: 12px 12px 0; }
+  .tabs button {
+    flex: 1; padding: 9px 4px; border: 1px solid var(--line); background: #fff;
+    border-radius: 10px; font-size: 15px; color: var(--text);
+  }
+  .tabs button.active { background: var(--green); color: #fff; border-color: var(--green); }
+  main { padding: 12px; }
+  .card {
+    background: var(--card); border-radius: 14px; padding: 14px;
+    margin-bottom: 10px; border-left: 6px solid var(--green);
+    box-shadow: 0 1px 2px rgba(0,0,0,.06);
+  }
+  .card.overdue { border-left-color: var(--red); }
+  .card.soon { border-left-color: var(--orange); }
+  .card.done { border-left-color: #aaa; opacity: .75; }
+  .card .name { font-size: 19px; font-weight: 600; }
+  .card .row { color: var(--muted); font-size: 15px; margin-top: 4px; }
+  .card .alert { margin-top: 6px; font-weight: 600; font-size: 15px; }
+  .card.overdue .alert { color: var(--red); }
+  .card.soon .alert { color: var(--orange); }
+  .empty { text-align: center; color: var(--muted); padding: 40px 20px; }
+  .fab {
+    position: fixed; left: 12px; right: 12px;
+    bottom: calc(14px + env(safe-area-inset-bottom));
+    padding: 16px; border: 0; border-radius: 14px;
+    background: var(--green); color: #fff; font-size: 19px; font-weight: 600;
+    box-shadow: 0 4px 12px rgba(0,0,0,.2);
+  }
+  /* Экран формы и карточки */
+  .screen {
+    position: fixed; inset: 0; background: var(--bg); z-index: 10;
+    overflow-y: auto; display: none;
+    padding-bottom: calc(30px + env(safe-area-inset-bottom));
+  }
+  .screen.open { display: block; }
+  .bar {
+    position: sticky; top: 0; background: var(--green); color: #fff;
+    display: flex; align-items: center; justify-content: space-between;
+    padding: calc(12px + env(safe-area-inset-top)) 12px 12px;
+  }
+  .bar button { background: none; border: 0; color: #fff; font-size: 17px; padding: 6px; }
+  .bar b { font-size: 18px; }
+  form, .details { padding: 12px; }
+  label { display: block; font-size: 14px; color: var(--muted); margin: 12px 4px 4px; }
+  input, textarea, select {
+    width: 100%; padding: 12px; font-size: 17px;
+    border: 1px solid var(--line); border-radius: 10px; background: #fff;
+    font-family: inherit; color: var(--text);
+  }
+  textarea { min-height: 80px; resize: vertical; }
+  .btn {
+    display: block; width: 100%; margin-top: 12px; padding: 15px;
+    font-size: 18px; border-radius: 12px; border: 0; font-weight: 600;
+    background: var(--green); color: #fff; text-align: center; text-decoration: none;
+  }
+  .btn.light { background: #fff; color: var(--green); border: 1px solid var(--green); }
+  .btn.red { background: #fff; color: var(--red); border: 1px solid var(--red); }
+  .info { background: #fff; border-radius: 14px; padding: 4px 14px; }
+  .info div { padding: 10px 0; border-bottom: 1px solid var(--line); }
+  .info div:last-child { border-bottom: 0; }
+  .info small { display: block; color: var(--muted); font-size: 13px; }
+  .two { display: flex; gap: 8px; }
+  .two .btn { flex: 1; }
+  .settings { padding: 0 12px 20px; }
+  .settings p { color: var(--muted); font-size: 14px; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Учёт ковров</h1>
+  <input class="search" id="search" type="search" placeholder="Поиск: имя, телефон, адрес">
+</header>
+
+<div class="tabs">
+  <button data-tab="active" class="active">У клиентов</button>
+  <button data-tab="due">Срочно</button>
+  <button data-tab="done">Возвращены</button>
+</div>
+
+<main id="list"></main>
+
+<div class="settings">
+  <button class="btn light" id="exportBtn">Сохранить копию данных</button>
+  <button class="btn light" id="importBtn">Загрузить копию данных</button>
+  <input type="file" id="importFile" accept=".json,application/json" hidden>
+  <p>Данные хранятся только на этом телефоне. Время от времени сохраняйте копию, чтобы не потерять записи при смене телефона или очистке Safari.</p>
+</div>
+
+<button class="fab" id="addBtn">+ Выдать ковёр</button>
+
+<!-- Форма -->
+<div class="screen" id="formScreen">
+  <div class="bar">
+    <button id="formCancel">Отмена</button>
+    <b id="formTitle">Новая выдача</b>
+    <span style="width:60px"></span>
+  </div>
+  <form id="form">
+    <label>Фамилия, имя / организация *</label>
+    <input name="name" required autocomplete="off">
+    <label>Телефон *</label>
+    <input name="phone" type="tel" required>
+    <label>Адрес</label>
+    <input name="address" autocomplete="off">
+    <label>Ковёр (номер, размер, цвет)</label>
+    <input name="carpet" autocomplete="off">
+    <label>Дата выдачи</label>
+    <input name="given" type="date">
+    <label>Когда поменять</label>
+    <input name="change" type="date">
+    <label>Когда забрать</label>
+    <input name="pickup" type="date">
+    <label>Цена / оплата</label>
+    <input name="price" autocomplete="off">
+    <label>Заметки</label>
+    <textarea name="notes"></textarea>
+    <button class="btn" type="submit">Сохранить</button>
+  </form>
+</div>
+
+<!-- Просмотр -->
+<div class="screen" id="viewScreen">
+  <div class="bar">
+    <button id="viewBack">‹ Назад</button>
+    <b>Карточка</b>
+    <button id="viewEdit">Изменить</button>
+  </div>
+  <div class="details" id="details"></div>
+</div>
+
+<script>
+const KEY = 'kovry_v1';
+let items = load();
+let tab = 'active';
+let currentId = null;
+
+function load() {
+  try { return JSON.parse(localStorage.getItem(KEY)) || []; } catch (e) { return []; }
+}
+function save() {
+  try { localStorage.setItem(KEY, JSON.stringify(items)); }
+  catch (e) { alert('Не получилось сохранить данные на телефоне.'); }
+}
+function today() {
+  const d = new Date(); d.setHours(0,0,0,0); return d;
+}
+function todayStr() {
+  const d = new Date();
+  return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+}
+function parse(s) {
+  if (!s) return null;
+  const [y,m,d] = s.split('-').map(Number);
+  return new Date(y, m-1, d);
+}
+function fmt(s) {
+  const d = parse(s);
+  return d ? d.toLocaleDateString('ru-RU') : '—';
+}
+function daysTo(s) {
+  const d = parse(s);
+  if (!d) return null;
+  return Math.round((d - today()) / 86400000);
+}
+function esc(s) {
+  return String(s || '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+function plural(n) {
+  n = Math.abs(n);
+  const a = n % 10, b = n % 100;
+  if (a === 1 && b !== 11) return 'день';
+  if (a >= 2 && a <= 4 && (b < 12 || b > 14)) return 'дня';
+  return 'дней';
+}
+
+// Ближайшее событие: замена или вывоз
+function nextEvent(it) {
+  if (it.returned) return null;
+  const ev = [];
+  if (it.change) ev.push({ what: 'Поменять', days: daysTo(it.change) });
+  if (it.pickup) ev.push({ what: 'Забрать', days: daysTo(it.pickup) });
+  ev.sort((a,b) => a.days - b.days);
+  return ev[0] || null;
+}
+function status(it) {
+  if (it.returned) return 'done';
+  const e = nextEvent(it);
+  if (!e) return '';
+  if (e.days < 0) return 'overdue';
+  if (e.days <= 2) return 'soon';
+  return '';
+}
+function alertText(it) {
+  const e = nextEvent(it);
+  if (!e) return '';
+  if (e.days < 0) return e.what + ': просрочено на ' + (-e.days) + ' ' + plural(e.days);
+  if (e.days === 0) return e.what + ' сегодня';
+  if (e.days === 1) return e.what + ' завтра';
+  return e.what + ' через ' + e.days + ' ' + plural(e.days);
+}
+
+function render() {
+  const q = document.getElementById('search').value.trim().toLowerCase();
+  let list = items.filter(it => {
+    if (tab === 'done' && !it.returned) return false;
+    if (tab === 'active' && it.returned) return false;
+    if (tab === 'due') {
+      const s = status(it);
+      if (s !== 'overdue' && s !== 'soon') return false;
+    }
+    if (!q) return true;
+    return [it.name, it.phone, it.address, it.carpet, it.notes].join(' ').toLowerCase().includes(q);
+  });
+  list.sort((a,b) => {
+    if (tab === 'done') return (b.returnedAt || '').localeCompare(a.returnedAt || '');
+    const ea = nextEvent(a), eb = nextEvent(b);
+    return (ea ? ea.days : 99999) - (eb ? eb.days : 99999);
+  });
+
+  const el = document.getElementById('list');
+  if (!list.length) {
+    const msg = tab === 'due' ? 'Срочных нет' : tab === 'done' ? 'Возвращённых пока нет' : 'Пока никому не выдано. Нажмите «Выдать ковёр».';
+    el.innerHTML = '<div class="empty">' + (q ? 'Ничего не найдено' : msg) + '</div>';
+    return;
+  }
+  el.innerHTML = list.map(it => `
+    <div class="card ${status(it)}" data-id="${it.id}">
+      <div class="name">${esc(it.name)}</div>
+      ${it.carpet ? `<div class="row">Ковёр: ${esc(it.carpet)}</div>` : ''}
+      <div class="row">${esc(it.phone)}${it.address ? ' · ' + esc(it.address) : ''}</div>
+      ${it.returned ? `<div class="row">Возвращён ${fmt(it.returnedAt)}</div>` : ''}
+      ${!it.returned && alertText(it) ? `<div class="alert">${alertText(it)}</div>` : ''}
+    </div>`).join('');
+}
+
+// Форма
+const form = document.getElementById('form');
+function openForm(it) {
+  form.reset();
+  document.getElementById('formTitle').textContent = it ? 'Изменить' : 'Новая выдача';
+  if (it) {
+    for (const k of ['name','phone','address','carpet','given','change','pickup','price','notes']) form.elements[k].value = it[k] || '';
+  } else {
+    form.elements.given.value = todayStr();
+  }
+  form.dataset.id = it ? it.id : '';
+  document.getElementById('formScreen').classList.add('open');
+}
+form.addEventListener('submit', e => {
+  e.preventDefault();
+  const data = {};
+  for (const k of ['name','phone','address','carpet','given','change','pickup','price','notes']) data[k] = form.elements[k].value.trim();
+  const id = form.dataset.id;
+  if (id) {
+    Object.assign(items.find(x => x.id === id), data);
+  } else {
+    items.push(Object.assign({ id: Date.now().toString(36) + Math.random().toString(36).slice(2,6), returned: false }, data));
+  }
+  save();
+  document.getElementById('formScreen').classList.remove('open');
+  if (id) showView(id);
+  render();
+});
+document.getElementById('formCancel').onclick = () => document.getElementById('formScreen').classList.remove('open');
+document.getElementById('addBtn').onclick = () => openForm(null);
+
+// Просмотр
+function showView(id) {
+  const it = items.find(x => x.id === id);
+  if (!it) return;
+  currentId = id;
+  const tel = (it.phone || '').replace(/[^\d+]/g, '');
+  const map = 'https://maps.apple.com/?q=' + encodeURIComponent(it.address || '');
+  document.getElementById('details').innerHTML = `
+    <div class="info">
+      <div><small>Кому</small><b>${esc(it.name)}</b></div>
+      <div><small>Телефон</small>${esc(it.phone)}</div>
+      <div><small>Адрес</small>${esc(it.address) || '—'}</div>
+      <div><small>Ковёр</small>${esc(it.carpet) || '—'}</div>
+      <div><small>Дата выдачи</small>${fmt(it.given)}</div>
+      <div><small>Когда поменять</small>${fmt(it.change)}</div>
+      <div><small>Когда забрать</small>${fmt(it.pickup)}</div>
+      <div><small>Цена / оплата</small>${esc(it.price) || '—'}</div>
+      <div><small>Заметки</small>${esc(it.notes).replace(/\n/g,'<br>') || '—'}</div>
+      ${it.returned ? `<div><small>Возвращён</small>${fmt(it.returnedAt)}</div>` : ''}
+    </div>
+    <div class="two">
+      ${tel ? `<a class="btn" href="tel:${tel}">Позвонить</a>` : ''}
+      ${it.address ? `<a class="btn light" href="${map}" target="_blank">На карте</a>` : ''}
+    </div>
+    ${it.returned
+      ? `<button class="btn light" id="unreturnBtn">Снова у клиента</button>`
+      : `<button class="btn light" id="changedBtn">Ковёр поменяли сегодня</button>
+         <button class="btn" id="returnBtn">Ковёр забрали</button>`}
+    <button class="btn red" id="deleteBtn">Удалить запись</button>`;
+  document.getElementById('viewScreen').classList.add('open');
+
+  const r = document.getElementById('returnBtn');
+  if (r) r.onclick = () => {
+    if (!confirm('Отметить, что ковёр забрали?')) return;
+    it.returned = true; it.returnedAt = todayStr(); save(); render(); showView(id);
+  };
+  const u = document.getElementById('unreturnBtn');
+  if (u) u.onclick = () => { it.returned = false; it.returnedAt = ''; save(); render(); showView(id); };
+  const c = document.getElementById('changedBtn');
+  if (c) c.onclick = () => {
+    const next = prompt('Ковёр поменяли. Когда следующая замена? (дд.мм.гггг, можно оставить пустым)', '');
+    if (next === null) return;
+    const note = 'Замена ' + new Date().toLocaleDateString('ru-RU');
+    it.notes = it.notes ? it.notes + '\n' + note : note;
+    const m = next.trim().match(/^(\d{1,2})\.(\d{1,2})\.(\d{4})$/);
+    it.change = m ? `${m[3]}-${m[2].padStart(2,'0')}-${m[1].padStart(2,'0')}` : '';
+    save(); render(); showView(id);
+  };
+  document.getElementById('deleteBtn').onclick = () => {
+    if (!confirm('Удалить запись «' + it.name + '»? Вернуть её будет нельзя.')) return;
+    items = items.filter(x => x.id !== id); save(); render();
+    document.getElementById('viewScreen').classList.remove('open');
+  };
+}
+document.getElementById('list').addEventListener('click', e => {
+  const card = e.target.closest('.card');
+  if (card) showView(card.dataset.id);
+});
+document.getElementById('viewBack').onclick = () => document.getElementById('viewScreen').classList.remove('open');
+document.getElementById('viewEdit').onclick = () => openForm(items.find(x => x.id === currentId));
+
+// Вкладки и поиск
+document.querySelectorAll('.tabs button').forEach(b => b.onclick = () => {
+  document.querySelectorAll('.tabs button').forEach(x => x.classList.remove('active'));
+  b.classList.add('active'); tab = b.dataset.tab; render();
+});
+document.getElementById('search').addEventListener('input', render);
+
+// Копия данных
+document.getElementById('exportBtn').onclick = async () => {
+  const name = 'kovry-' + todayStr() + '.json';
+  const file = new File([JSON.stringify(items, null, 1)], name, { type: 'application/json' });
+  if (navigator.canShare && navigator.canShare({ files: [file] })) {
+    try { await navigator.share({ files: [file], title: 'Копия: учёт ковров' }); return; } catch (e) { if (e.name === 'AbortError') return; }
+  }
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(file); a.download = name; a.click();
+};
+document.getElementById('importBtn').onclick = () => document.getElementById('importFile').click();
+document.getElementById('importFile').onchange = e => {
+  const f = e.target.files[0];
+  if (!f) return;
+  const rd = new FileReader();
+  rd.onload = () => {
+    try {
+      const data = JSON.parse(rd.result);
+      if (!Array.isArray(data)) throw 0;
+      if (!confirm('Заменить текущие записи (' + items.length + ') записями из файла (' + data.length + ')?')) return;
+      items = data; save(); render();
+    } catch (err) { alert('Это не файл копии учёта ковров.'); }
+  };
+  rd.readAsText(f);
+  e.target.value = '';
+};
+
+render();
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
+</script>
+</body>
+</html>
