@@ -62,6 +62,8 @@
   .card .alert { margin-top: 6px; font-weight: 600; font-size: 15px; }
   .card.overdue .alert { color: var(--red); }
   .card.soon .alert { color: var(--orange); }
+  .due-banner { display:none; margin: 12px 12px 0; padding: 12px 14px; border-radius: 12px; background: #fdf2e0; color: #8a5a00; font-weight: 600; font-size: 15px; }
+  .due-banner.red { background: #fbe4e1; color: var(--red); }
   .empty { text-align: center; color: var(--muted); padding: 40px 20px; }
   .fab {
     position: fixed; left: 12px; right: 12px;
@@ -115,6 +117,8 @@
   <h1>Учёт ковров</h1>
   <input class="search" id="search" type="search" placeholder="Поиск: имя, телефон, адрес">
 </header>
+
+<div class="due-banner" id="dueBanner"></div>
 
 <div class="tabs">
   <button data-tab="active" class="active">У клиентов</button>
@@ -262,6 +266,7 @@ function render() {
     return (ea ? ea.days : 99999) - (eb ? eb.days : 99999);
   });
 
+  updateDue();
   const el = document.getElementById('list');
   if (!list.length) {
     const msg = tab === 'due' ? 'Срочных нет' : tab === 'done' ? 'Возвращённых пока нет' : 'Пока никому не выдано. Нажмите «Выдать ковёр».';
@@ -296,16 +301,78 @@ form.addEventListener('submit', e => {
   const data = {};
   for (const k of ['name','phone','address','carpet','given','change','pickup','price','notes']) data[k] = form.elements[k].value.trim();
   const id = form.dataset.id;
+  let it;
   if (id) {
-    Object.assign(items.find(x => x.id === id), data);
+    it = items.find(x => x.id === id);
+    var datesChanged = it.change !== data.change || it.pickup !== data.pickup;
+    Object.assign(it, data);
   } else {
-    items.push(Object.assign({ id: Date.now().toString(36) + Math.random().toString(36).slice(2,6), returned: false }, data));
+    it = Object.assign({ id: Date.now().toString(36) + Math.random().toString(36).slice(2,6), returned: false }, data);
+    items.push(it);
+    var datesChanged = true;
   }
   save();
   document.getElementById('formScreen').classList.remove('open');
   if (id) showView(id);
   render();
+  if (datesChanged && (it.change || it.pickup)) {
+    if (confirm('Поставить напоминание в календарь телефона? Телефон напомнит звуком накануне и в сам день в ' + REMIND_HOUR + ':00.')) addToCalendar(it);
+  }
 });
+
+// Напоминания через календарь телефона (.ics файл)
+const REMIND_HOUR = 9;
+function icsText(s) {
+  return String(s || '').replace(/\\/g, '\\\\').replace(/\n/g, '\\n').replace(/([,;])/g, '\\$1');
+}
+function icsEvent(it, date, what) {
+  const d = date.replace(/-/g, '');
+  const h = String(REMIND_HOUR).padStart(2, '0');
+  const now = new Date().toISOString().replace(/[-:]/g, '').replace(/\.\d+/, '');
+  const desc = [it.name, 'Тел.: ' + it.phone, it.address ? 'Адрес: ' + it.address : '', it.carpet ? 'Ковёр: ' + it.carpet : ''].filter(Boolean).join('\n');
+  return [
+    'BEGIN:VEVENT',
+    'UID:' + it.id + '-' + what + '-' + d + '@kovry-uchet',
+    'DTSTAMP:' + now,
+    'DTSTART:' + d + 'T' + h + '0000',
+    'DTEND:' + d + 'T' + h + '3000',
+    'SUMMARY:' + icsText((what === 'pickup' ? 'Забрать ковёр: ' : 'Поменять ковёр: ') + it.name),
+    'DESCRIPTION:' + icsText(desc),
+    it.address ? 'LOCATION:' + icsText(it.address) : '',
+    'BEGIN:VALARM', 'ACTION:DISPLAY', 'DESCRIPTION:Напоминание', 'TRIGGER:-P1D', 'END:VALARM',
+    'BEGIN:VALARM', 'ACTION:DISPLAY', 'DESCRIPTION:Напоминание', 'TRIGGER:PT0M', 'END:VALARM',
+    'END:VEVENT'
+  ].filter(Boolean).join('\r\n');
+}
+function addToCalendar(it) {
+  const ev = [];
+  if (it.change) ev.push(icsEvent(it, it.change, 'change'));
+  if (it.pickup) ev.push(icsEvent(it, it.pickup, 'pickup'));
+  if (!ev.length) { alert('Сначала укажите дату замены или дату, когда забрать.'); return; }
+  const ics = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//kovry-uchet//RU', 'CALSCALE:GREGORIAN', 'METHOD:PUBLISH'].concat(ev, ['END:VCALENDAR']).join('\r\n');
+  const blob = new Blob([ics], { type: 'text/calendar;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  if (!/iPhone|iPad|iPod/.test(navigator.userAgent)) a.download = 'napominanie.ics';
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 60000);
+}
+
+// Значок с числом срочных на иконке и плашка при открытии
+function updateDue() {
+  const due = items.filter(it => { const s = status(it); return s === 'overdue' || s === 'soon'; });
+  const over = due.filter(it => status(it) === 'overdue').length;
+  const b = document.getElementById('dueBanner');
+  if (due.length) {
+    b.textContent = over ? 'Просрочено: ' + over + '. Всего срочных: ' + due.length + '. Нажмите, чтобы посмотреть.' : 'Срочных на ближайшие 2 дня: ' + due.length + '. Нажмите, чтобы посмотреть.';
+    b.className = 'due-banner' + (over ? ' red' : '');
+    b.style.display = 'block';
+  } else b.style.display = 'none';
+  if (navigator.setAppBadge) { (due.length ? navigator.setAppBadge(due.length) : navigator.clearAppBadge()).catch(() => {}); }
+}
+document.getElementById('dueBanner').onclick = () => document.querySelector('.tabs button[data-tab="due"]').click();
+document.addEventListener('visibilitychange', () => { if (!document.hidden) render(); });
 document.getElementById('formCancel').onclick = () => document.getElementById('formScreen').classList.remove('open');
 document.getElementById('addBtn').onclick = () => openForm(null);
 
@@ -336,6 +403,7 @@ function showView(id) {
     ${it.returned
       ? `<button class="btn light" id="unreturnBtn">Снова у клиента</button>`
       : `<button class="btn light" id="changedBtn">Ковёр поменяли сегодня</button>
+         <button class="btn light" id="calBtn">Напомнить (в календарь)</button>
          <button class="btn" id="returnBtn">Ковёр забрали</button>`}
     <button class="btn red" id="deleteBtn">Удалить запись</button>`;
   document.getElementById('viewScreen').classList.add('open');
@@ -347,6 +415,8 @@ function showView(id) {
   };
   const u = document.getElementById('unreturnBtn');
   if (u) u.onclick = () => { it.returned = false; it.returnedAt = ''; save(); render(); showView(id); };
+  const cal = document.getElementById('calBtn');
+  if (cal) cal.onclick = () => addToCalendar(it);
   const c = document.getElementById('changedBtn');
   if (c) c.onclick = () => {
     const next = prompt('Ковёр поменяли. Когда следующая замена? (дд.мм.гггг, можно оставить пустым)', '');
@@ -356,6 +426,7 @@ function showView(id) {
     const m = next.trim().match(/^(\d{1,2})\.(\d{1,2})\.(\d{4})$/);
     it.change = m ? `${m[3]}-${m[2].padStart(2,'0')}-${m[1].padStart(2,'0')}` : '';
     save(); render(); showView(id);
+    if (it.change && confirm('Поставить напоминание о следующей замене в календарь?')) addToCalendar(it);
   };
   document.getElementById('deleteBtn').onclick = () => {
     if (!confirm('Удалить запись «' + it.name + '»? Вернуть её будет нельзя.')) return;
